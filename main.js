@@ -2,12 +2,12 @@ const WebSocketPort = 9000;
 const WebSocket = require('ws');
 const server = new WebSocket.Server({ port: WebSocketPort });
 
-// [{who: string, ws: wsClient}, ...]
+// [wsClient, ...]
 const clients = new Set();
 
 function broadcast(type, data) {
   for (let client of clients) {
-    client.ws.send(JSON.stringify({
+    client.send(JSON.stringify({
       type: type,
       data: data
     }));
@@ -15,14 +15,13 @@ function broadcast(type, data) {
 }
 function getClientsNameList() {
   const list = [];
-  clients.forEach((cl)=>{
-    list.push(cl.who);
+  clients.forEach((client)=>{
+    list.push(client.who);
   })
   return list;
 }
 
 function onConnect(client) {
-  // clients.add(client);
   console.log("Пользователь подключился");
   client.send(JSON.stringify({
     type: "NOTIFY",
@@ -48,8 +47,8 @@ function onConnect(client) {
           if (!message.data.who) return;
           let who = message.data.who.slice(0, 50);
 
-          for (let cl of clients) {
-            if (cl.who === who) {
+          for (let client of clients) {
+            if (client.who === who) {
               client.send(JSON.stringify({
                 type: "CHANGE_NICK",
                 data: "Имя занято"
@@ -57,11 +56,12 @@ function onConnect(client) {
               return;
             }
           }
+          client.who = who;
           client.send(JSON.stringify({
             type: "CLIENTS",
             data: getClientsNameList()
           }));
-          clients.add({ who: who, ws: client });
+          clients.add(client);
           broadcast("NEWMEM", who);
           broadcast("COUNT", clients.size);
           break;
@@ -84,7 +84,7 @@ function onConnect(client) {
 
   client.on("close", function () {
     clients.forEach((cl) => {
-      if (cl.ws === client) {
+      if (cl === client) {
         broadcast("DELMEM", cl.who);
         clients.delete(cl);
         return;
