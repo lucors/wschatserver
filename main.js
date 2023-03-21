@@ -33,22 +33,18 @@ function onConnect(client) {
       message = JSON.parse(message);
       switch (message.type) {
         case "MSG":
-          if (!message.data.who) return;
-          for (let cl of clients) {
-            if (cl.who === message.data.who && cl.ws !== client) {
-              return;
-            }
-          }
-          message.data.msg = message.data.msg.slice(0, 2000);
+          if (!clients.has(client)) return;
+          if (!("who" in client)) return;
           if (message.data.msg === "") return;
-          broadcast("MSG", message.data);
+          message.data.msg = message.data.msg.slice(0, 2000);
+          broadcast("MSG", {who: client.who, msg: message.data.msg});
           break;
         case "NEWMEM":
           if (!message.data.who) return;
           let who = message.data.who.slice(0, 50);
 
-          for (let client of clients) {
-            if (client.who === who) {
+          for (let cl of clients) {
+            if (cl.who === who) {
               client.send(JSON.stringify({
                 type: "CHANGE_NICK",
                 data: "Имя занято"
