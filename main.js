@@ -46,7 +46,7 @@ function onConnect(client) {
           for (let cl of clients) {
             if (cl.who === who) {
               client.send(JSON.stringify({
-                type: "CHANGE_NICK",
+                type: "NEWMEM_CHANGE_NICK",
                 data: "Имя занято"
               }));
               return;
@@ -58,6 +58,10 @@ function onConnect(client) {
             data: getClientsNameList()
           }));
           clients.add(client);
+          client.send(JSON.stringify({
+            type: "NEWMEM_OK",
+            data: getClientsNameList()
+          }));
           broadcast("NEWMEM", who);
           broadcast("COUNT", clients.size);
           break;
@@ -79,14 +83,16 @@ function onConnect(client) {
   });
 
   client.on("close", function () {
+    let who = "Null";
     clients.forEach((cl) => {
       if (cl === client) {
         broadcast("DELMEM", cl.who);
         clients.delete(cl);
+        who = cl.who;
         return;
       }
     });
-    console.log("Пользователь отключился");
+    console.log(`Пользователь отключился: ${who}`);
     broadcast("COUNT", clients.size);
   });
 }
