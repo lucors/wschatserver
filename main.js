@@ -5,12 +5,14 @@ const server = new WebSocket.Server({ port: WebSocketPort });
 // [wsClient, ...]
 const clients = new Set();
 
-function broadcast(type, data) {
+function direct(client, mode, data = undefined) {
+  let msg = [mode];
+  if (data) msg.push(data);
+  client.send(JSON.stringify(msg));
+}
+function broadcast(mode, data) {
   for (let client of clients) {
-    client.send(JSON.stringify({
-      type: type,
-      data: data
-    }));
+    direct(client, mode, data);
   }
 }
 function getClientsNameList() {
@@ -23,61 +25,43 @@ function getClientsNameList() {
 
 function onConnect(client) {
   console.log("Пользователь подключился");
-  client.send(JSON.stringify({
-    type: "NOTIFY",
-    data: "Добро пожаловать в чат!"
-  }));
+  direct(client, "NOTIFY", "Добро пожаловать в чат!");
 
   client.on("message", function (message) {
     try {
       message = JSON.parse(message);
-      switch (message.type) {
+      switch (message[0]) {
         case "MSG":
           if (!clients.has(client)) return;
           if (!("who" in client)) return;
-          if (message.data.msg === "") return;
-          message.data.msg = message.data.msg.slice(0, 2000);
-          broadcast("MSG", {who: client.who, msg: message.data.msg});
+          if (message[1].msg === "") return;
+          message[1].msg = message[1].msg.slice(0, 2000);
+          broadcast("MSG", {who: client.who, msg: message[1].msg});
           break;
         case "NEWMEM":
-          if (!message.data.who) return;
-          let who = message.data.who.slice(0, 50);
+          if (!message[1].who) return;
+          let who = message[1].who.slice(0, 50);
 
           for (let cl of clients) {
             if (cl.who === who) {
-              client.send(JSON.stringify({
-                type: "NEWMEM_CHANGE_NICK",
-                data: "Имя занято"
-              }));
+              direct(client, "NEWMEM_CHANGE_NICK", "Имя занято");
               return;
             }
           }
           client.who = who;
-          client.send(JSON.stringify({
-            type: "CLIENTS",
-            data: getClientsNameList()
-          }));
+          direct(client, "CLIENTS", getClientsNameList());
           clients.add(client);
-          client.send(JSON.stringify({
-            type: "NEWMEM_OK",
-            data: getClientsNameList()
-          }));
+          direct(client, "NEWMEM_OK");
           broadcast("NEWMEM", who);
           broadcast("COUNT", clients.size);
           break;
         default:
-          client.send(JSON.stringify({
-            type: "ERROR",
-            data: `Неизвестный тип сообщения: ${message.type}`
-          }));
-          console.error(`Неизвестный тип сообщения: ${message.type}`);
+          direct(client, "ERROR", `Неизвестный тип сообщения: ${message[0]}`);
+          console.error(`Неизвестный тип сообщения: ${message[0]}`);
       }
     }
     catch (error) {
-      client.send(JSON.stringify({
-        type: "ERROR",
-        data: "Ошибка: " + error
-      }));
+      direct(client, "ERROR", `Ошибка: ${error}`);
       console.error("Ошибка: ", error);
     }
   });
