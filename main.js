@@ -1,8 +1,8 @@
-import { onConnect } from './handler.js';
-import { WebSocketServer } from 'ws';
+const handler = require('./handler.js');
+const WebSocket = require('ws');
 
 const WebSocketPort = 9000;
-const server = new WebSocketServer({ port: WebSocketPort });
+const server = new WebSocket.Server({ port: WebSocketPort });
 
-server.on('connection', onConnect);
+server.on('connection', handler.onConnect);
 console.log(`Сервер запущен на порту: ${WebSocketPort}`);

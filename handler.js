@@ -13,7 +13,7 @@ const rooms = [
 
 //-----------------------------------------------------------------------------------
 // EXPORTS
-export function onConnect(client) {
+module.exports.onConnect = function(client) {
   console.log("Пользователь подключился");
   direct(client, "NOTIFY", "Выберите канал");
   client.on("message", (msg) => onMessage(client, msg));
