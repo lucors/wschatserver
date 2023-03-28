@@ -19,7 +19,6 @@ module.exports.onConnect = function(client) {
   client.on("message", (msg) => onMessage(client, msg));
   client.on("close", (msg) => onClose(client));
 }
-//-----------------------------------------------------------------------------------
 
 
 
@@ -27,7 +26,7 @@ module.exports.onConnect = function(client) {
 // COMMON UTILS
 function direct(client, mode, data = undefined) {
   let msg = [mode];
-  if (data) msg.push(data);
+  if (data !== undefined) msg.push(data);
   client.send(JSON.stringify(msg));
 }
 function totalBroadcast(mode, data) {
@@ -45,6 +44,7 @@ function totalClientsNames() {
 
 // ROOMS UTILS
 function checkRid(rid) {
+  if (rid === undefined) return false;
   if (rooms.length === 0) return false;
   if (rid >= rooms.length || rid < 0) return false;
   return true;
@@ -70,7 +70,6 @@ function roomBroadcast(rid, mode, data) {
     direct(member, mode, data);
   }
 }
-//-----------------------------------------------------------------------------------
 
 
 
@@ -80,7 +79,7 @@ function onClose(client){
   let who = "Null";
   clients.forEach((cl) => {
     if (cl === client) {
-      autoleaveRoom(cl);
+      leaveRoom(cl);
       clients.delete(cl);
       who = cl.who;
       return;
@@ -114,12 +113,18 @@ function onMessage(client, raw){
 }
 
 incomingHandlers.push({
+  mode: "PING",
+  func: function(client, message){
+    direct(client, "PING", Date.now());
+  }
+});
+
+incomingHandlers.push({
   mode: "MSG",
   func: function(client, message){
     if (!clients.has(client)) return;
     if (!("who" in client)) return;
     if (!("rid" in client)) return;
-    if (!client.rid) return;
     if (message.length < 2) return;
     if (message[1].msg === "") return;
 
@@ -147,20 +152,20 @@ incomingHandlers.push({
     clients.add(client);
     direct(client, "AUTH_OK");
     totalBroadcast("COUNT", clients.size);
+    enterRoom(client, 0);
   }
 });
 
-function leaveRoom(client, rid){
+function forceLeaveRoom(client, rid){
   client.rid = undefined;
+  if (!checkRid(rid)) return;
   if (rooms[rid].mems.delete(client)) {
     roomBroadcast(rid, "DEL_MEM", client.who);
     roomBroadcast(rid, "ROOM_COUNT", rooms[rid].mems.size);
   }
 }
-function autoleaveRoom(client){
-  if (!("rid" in client)) return;
-  if (!client.rid) return;
-  leaveRoom(client, client.rid);
+function leaveRoom(client){
+  forceLeaveRoom(client, client.rid);
 }
 function enterRoom(client, rid){
   direct(client, "ROOM_CHANGE_OK", rid);
@@ -186,8 +191,7 @@ incomingHandlers.push({
       direct(client, "ROOM_CHANGE_FAIL", "Вы уже в этой комнате");
       return;
     }
-    autoleaveRoom(client);
+    leaveRoom(client);
     enterRoom(client, rid);
   }
 });
-//-----------------------------------------------------------------------------------
