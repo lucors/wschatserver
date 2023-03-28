@@ -1,3 +1,5 @@
+const fs = require("fs");
+
 // [wsClient, ...]
 const clients = new Set();
 let incomingHandlers = []; //[{mode: string, func: function()},...]
@@ -29,11 +31,17 @@ module.exports.onConnect = function(client) {
 //-----------------------------------------------------------------------------------
 // COMMON UTILS
 function historySlice(maxlen, interval) {
+  if (!fs.existsSync("./history")) fs.mkdirSync("./history");
   setInterval(() => {
-    for (const key of Object.keys(historyPool)) {
-      if (historyPool[key].length >= maxlen){
-        historyPool[key] = historyPool[key].slice(historyPool[key].length-maxlen);
-        console.log(`History pool (${key}) sliced`);
+    for (const rid of Object.keys(historyPool)) {
+      if (historyPool[rid].length > maxlen){
+        const longhistory = JSON.stringify(historyPool[rid].slice(0, historyPool[rid].length-maxlen))+'\n';
+        fs.appendFile(`./history/${rid}.txt`, longhistory, function(error){
+          if (error) console.error(`Ошибка записи истории. Комната ${rid}`);
+        });
+
+        historyPool[rid] = historyPool[rid].slice(historyPool[rid].length-maxlen);
+        console.log(`History pool (${rid}) sliced`);
       }
     }
   }, interval);
