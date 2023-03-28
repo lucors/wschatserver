@@ -5,10 +5,14 @@ let flags = {
   debug: false
 }
 const rooms = [
-  {title: "General", mems: new Set()},
-  {title: "Test", mems: new Set()},
+  {title: "General", mems: new Set(), history: true},
+  {title: "Без истории", mems: new Set(), history: false},
 ]
-
+const historyPool = {
+  "0": []
+}
+//Срез 50 каждые полчаса 
+historySlice(50, 1800*1000);
 
 
 //-----------------------------------------------------------------------------------
@@ -24,6 +28,16 @@ module.exports.onConnect = function(client) {
 
 //-----------------------------------------------------------------------------------
 // COMMON UTILS
+function historySlice(maxlen, interval) {
+  setInterval(() => {
+    for (const key of Object.keys(historyPool)) {
+      if (historyPool[key].length >= maxlen){
+        historyPool[key] = historyPool[key].slice(historyPool[key].length-maxlen);
+        console.log(`History pool (${key}) sliced`);
+      }
+    }
+  }, interval);
+}
 function direct(client, mode, data = undefined) {
   let msg = [mode];
   if (data !== undefined) msg.push(data);
@@ -66,9 +80,18 @@ function roomsData() {
 }
 function roomBroadcast(rid, mode, data) {
   if (!checkRid(rid)) return;
+  if (mode === "MSG" && rooms[rid].history) {
+    historyPool[rid].push(data);
+  }
   for (let member of rooms[rid].mems) {
     direct(member, mode, data);
   }
+}
+function roomHistory(rid) {
+  if (rid in historyPool){
+    return historyPool[rid];
+  }
+  return [];
 }
 
 
@@ -129,7 +152,7 @@ incomingHandlers.push({
     if (message[1].msg === "") return;
 
     message[1].msg = message[1].msg.slice(0, 2000);
-    roomBroadcast(client.rid, "MSG", {who: client.who, msg: message[1].msg});
+    roomBroadcast(client.rid, "MSG", [client.who, message[1].msg]);
   }
 });
 
@@ -173,6 +196,7 @@ function enterRoom(client, rid){
   direct(client, "MEMBERS", roomMembersNames(rid));
   client.rid = rid;
   rooms[rid].mems.add(client);
+  direct(client, "HISTORY", roomHistory(rid));
   roomBroadcast(rid, "NEW_MEM", client.who);
   roomBroadcast(rid, "ROOM_COUNT", rooms[rid].mems.size);
 }
