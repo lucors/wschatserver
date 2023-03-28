@@ -196,7 +196,9 @@ function enterRoom(client, rid){
   direct(client, "MEMBERS", roomMembersNames(rid));
   client.rid = rid;
   rooms[rid].mems.add(client);
-  direct(client, "HISTORY", roomHistory(rid));
+  if (rid in historyPool){
+    direct(client, "HISTORY", roomHistory(rid));
+  }
   roomBroadcast(rid, "NEW_MEM", client.who);
   roomBroadcast(rid, "ROOM_COUNT", rooms[rid].mems.size);
 }
