@@ -41,7 +41,6 @@ module.exports.prepare = function() {
       });
     }
   );
-
   db.query(
     "SELECT * FROM rooms",
     function(err, results) {
@@ -61,6 +60,7 @@ module.exports.prepare = function() {
       historySlice(config.historySlice.count, config.historySlice.time);
     }
   );
+  db.end();
 }
 module.exports.onConnect = function(client) {
   console.log("Пользователь подключился");
