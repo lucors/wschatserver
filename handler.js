@@ -105,6 +105,15 @@ function roomMembersNames(rid) {
   })
   return list;
 }
+function roomMemberByWho(rid, who) {
+  if (!checkRid(rid)) return undefined;
+  for (let member of rooms[rid].mems) {
+    if (member.who === who) {
+      return member;
+    } 
+  }
+  return undefined;
+}
 function roomsData() {
   const list = [];
   rooms.forEach((room, rid)=>{
@@ -114,7 +123,7 @@ function roomsData() {
 }
 function roomBroadcast(rid, mode, data) {
   if (!checkRid(rid)) return;
-  if (mode === "MSG" && rooms[rid].history) {
+  if (mode === "MSG" || mode === "MSG_BLUR" && rooms[rid].history) {
     historyPool[rid].push(data);
   }
   for (let member of rooms[rid].mems) {
@@ -145,6 +154,14 @@ function totalClientsNames() {
     list.push(client.who);
   })
   return list;
+}
+function clientByWho(who) {
+  for (let client of clients) {
+    if (client.who === who) {
+      return client;
+    } 
+  }
+  return undefined;
 }
 function isAdmin(who) {
   return (who in admins);
@@ -212,6 +229,45 @@ incomingHandlers.push({
 
     message[1] = message[1].slice(0, 2000);
     roomBroadcast(client.rid, "MSG", [client.who, message[1]]);
+  }
+});
+
+incomingHandlers.push({
+  mode: "MSG_BLUR",
+  func: function(client, message){
+    if (!clients.has(client)) return;
+    if (!("who" in client)) return;
+    if (!("rid" in client)) return;
+    if (message.length < 2) return;
+    if (message[1] === "") return;
+
+    message[1] = message[1].slice(0, 2000);
+    roomBroadcast(client.rid, "MSG_BLUR", [client.who, message[1]]);
+  }
+});
+
+incomingHandlers.push({
+  mode: "MSG_DIRECT",
+  func: function(client, message){
+    if (!clients.has(client)) return;
+    if (!("who" in client)) return;
+    if (!("rid" in client)) return;
+    if (message.length < 2) return;
+    if (message[1].length < 2) return;
+    if (!message[1][0] || !message[1][1]) return;
+
+    if (message[1][0] === client.who) {
+      direct(client, "ERROR", "Отправка самому себе недоступна");
+      return;
+    }
+    const whom = roomMemberByWho(client.rid, message[1][0]);
+    if (!whom) {
+      direct(client, "ERROR", "Пользователь не найден");
+      return;
+    }
+    message[1][1] = message[1][1].slice(0, 2000);
+    direct(client, "MSG_DIRECT", [client.who, whom.who, message[1][1]]);
+    direct(whom, "MSG_DIRECT", [client.who, whom.who, message[1][1]]);
   }
 });
 
