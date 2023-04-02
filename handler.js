@@ -365,3 +365,33 @@ incomingHandlers.push({
     enterRoom(client, rid);
   }
 });
+
+//-----------------------------------------------------------------------------------
+// ADMINS WSS HANDLERS
+incomingHandlers.push({
+  mode: "BROADCAST_R",
+  func: function(client, message){
+    if (!client.admin) return;
+    if (message.length < 2) return;
+    
+    if (typeof message[1] === "string") {
+      if (!message[1] || (client.rid === undefined)) return;
+      roomBroadcast(client.rid, "NOTIFY", message[1]);
+    }
+    else {
+      if (message[1].length < 2) return;
+      if (!message[1][0] || !message[1][1]) return;
+      roomBroadcast(message[1][0], "NOTIFY", message[1][1]);
+    }
+  }
+});
+incomingHandlers.push({
+  mode: "BROADCAST",
+  func: function(client, message){
+    if (!client.admin) return;
+    if (message.length < 2) return;
+    if (!message[1]) return;
+    
+    totalBroadcast("NOTIFY", message[1]);
+  }
+});
