@@ -163,12 +163,21 @@ function clientByWho(who) {
   }
   return undefined;
 }
+
+// ADMINS UTILS
 function isAdmin(who) {
   return (who in admins);
 }
 function adminCheckPass(who, hashpass) {
   if (!isAdmin(who)) return false;
   return (admins[who] === hashpass);
+}
+function adminBroadcast(mode, data) {
+  for (let client of clients) {
+    if (isAdmin(client.who)){
+      direct(client, mode, data);
+    }
+  }
 }
 
 
@@ -184,6 +193,7 @@ function onClose(client){
       return;
     }
   });
+  adminBroadcast("DEL_CLI", who);
   console.log(`Пользователь отключился: ${who}`);
   totalBroadcast("COUNT", clients.size);
 }
@@ -275,9 +285,13 @@ function authUser(client, who, admin = false) {
   client.admin = admin;
   client.who = who;
   client.rid = undefined;
+  if (admin) {
+    direct(client, "CLIENTS", totalClientsNames());
+  }
   direct(client, "ROOMS", roomsData());
   clients.add(client);
   direct(client, "AUTH_OK", admin);
+  adminBroadcast("NEW_CLI", who);
   totalBroadcast("COUNT", clients.size);
   enterRoom(client, 0);
   console.log(`${admin ? "Админ." : "Пользователь"} авторизован: ${who}`);
