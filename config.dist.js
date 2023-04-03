@@ -11,6 +11,7 @@ config.historySlice = {
     count: 50,
     time: 1800*1000,
 };
+config.unavailableNames = ["сервер", "server"];
 config.notify = `Всем привет!`;
 
 module.exports = config;

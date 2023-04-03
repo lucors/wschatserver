@@ -9,6 +9,7 @@ let incomingHandlers = []; //[{mode: string, func: function()},...]
 let flags = {
   debug: config.debug
 }
+let unavailableNames = config.unavailableNames ?? [];
 let admins = {};
 let rooms = [];
 const historyPool = {
@@ -312,7 +313,7 @@ incomingHandlers.push({
     if (message.length < 2) return;
     if (!message[1]) return;
     let who = message[1].slice(0, 50);
-    if (who === "Сервер" || who === "Сервер") {
+    if (unavailableNames.includes(who.toLowerCase())) {
       direct(client, "AUTH_FAIL", "Имя недоступно");
       return;
     }
