@@ -303,8 +303,7 @@ function authUser(client, who, admin = false) {
   direct(client, "AUTH_OK", admin);
   adminBroadcast("NEW_CLI", who);
   totalBroadcast("COUNT", clients.size);
-  enterRoom(client, 0);
-  if (config.notify) direct(client, "MSG", ["Сервер", config.notify]);
+  enterRoom(client, 0, config.notify);
   console.log(`${admin ? "Админ." : "Пользователь"} авторизован: ${who}`);
 }
 incomingHandlers.push({
@@ -363,12 +362,15 @@ function forceLeaveRoom(client, rid){
 function leaveRoom(client){
   forceLeaveRoom(client, client.rid);
 }
-function enterRoom(client, rid){
+function enterRoom(client, rid, notify = undefined){
   direct(client, "ROOM_CHANGE_OK", rid);
   // direct(client, "NOTIFY", "Добро пожаловать в чат!");
   direct(client, "MEMBERS", roomMembersNames(rid));
   client.rid = rid;
   rooms[rid].mems.add(client);
+  if (notify) {
+    direct(client, "MSG", ["Сервер", config.notify]);
+  }
   if (rid in historyPool){
     direct(client, "HISTORY", roomHistory(rid));
   }
