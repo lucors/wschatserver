@@ -15,7 +15,10 @@ const historyPool = {
   prepare: function() {
     rooms.forEach((room, index) => {
       if (room.history) {
-        historyPool[index] = [];
+        historyPool[index] = {
+          msg: [],
+          blur: []
+        };
       }
     });
     delete historyPool.prepare;
@@ -56,7 +59,7 @@ module.exports.prepare = function() {
         })
       });
       historyPool.prepare();
-      //Срез 50 каждые полчаса 
+      //Старт цикла среза истории
       historySlice(config.historySlice.count, config.historySlice.time);
     }
   );
@@ -64,7 +67,7 @@ module.exports.prepare = function() {
 }
 module.exports.onConnect = function(client) {
   console.log("Пользователь подключился");
-  direct(client, "NOTIFY", "Выберите канал");
+  // direct(client, "NOTIFY", "Выберите канал");
   client.on("message", (msg) => onMessage(client, msg));
   client.on("close", (msg) => onClose(client));
 }
@@ -74,17 +77,20 @@ module.exports.onConnect = function(client) {
 //-----------------------------------------------------------------------------------
 // COMMON UTILS
 function historySlice(maxlen, interval) {
-  if (!fs.existsSync("./history")) fs.mkdirSync("./history");
+  // if (!fs.existsSync("./history")) fs.mkdirSync("./history");
   setInterval(() => {
     for (const rid of Object.keys(historyPool)) {
-      if (historyPool[rid].length > maxlen){
-        const longhistory = JSON.stringify(historyPool[rid].slice(0, historyPool[rid].length-maxlen))+'\n';
-        fs.appendFile(`./history/${rid}.txt`, longhistory, function(error){
-          if (error) console.error(`Ошибка записи истории. Комната ${rid}`);
-        });
-
-        historyPool[rid] = historyPool[rid].slice(historyPool[rid].length-maxlen);
-        console.log(`History pool (${rid}) sliced`);
+      if (historyPool[rid].msg.length > maxlen){
+        // const longhistory = JSON.stringify(historyPool[rid].slice(0, historyPool[rid].length-maxlen))+'\n';
+        // fs.appendFile(`./history/${rid}.txt`, longhistory, function(error){
+        //   if (error) console.error(`Ошибка записи истории. Комната ${rid}`);
+        // });
+        historyPool[rid].msg = historyPool[rid].msg.slice(historyPool[rid].msg.length-maxlen);
+        console.log(`History pool (${rid}:msg) sliced`);
+      }
+      if (historyPool[rid].blur.length > maxlen){
+        historyPool[rid].blur = historyPool[rid].blur.slice(historyPool[rid].blur.length-maxlen);
+        console.log(`History pool (${rid}:blur) sliced`);
       }
     }
   }, interval);
@@ -123,8 +129,11 @@ function roomsData() {
 }
 function roomBroadcast(rid, mode, data) {
   if (!checkRid(rid)) return;
-  if (mode === "MSG" || mode === "MSG_BLUR" && rooms[rid].history) {
-    historyPool[rid].push(data);
+  if (mode === "MSG" && rooms[rid].history) {
+    historyPool[rid].msg.push(data);
+  }
+  else if (mode === "MSG_BLUR" && rooms[rid].history) {
+    historyPool[rid].blur.push(data);
   }
   for (let member of rooms[rid].mems) {
     direct(member, mode, data);
@@ -200,7 +209,7 @@ function onClose(client){
 
 function onMessage(client, raw){
   try {
-      if (flags.debug) console.log(`Получено: ` + raw);
+      if (flags.debug) console.log(`Получено (${client.who}:${client.admin}): ` + raw);
       const message = JSON.parse(raw);
       let _done = false;
       incomingHandlers.forEach(handler => {
