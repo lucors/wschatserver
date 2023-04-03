@@ -303,6 +303,7 @@ function authUser(client, who, admin = false) {
   adminBroadcast("NEW_CLI", who);
   totalBroadcast("COUNT", clients.size);
   enterRoom(client, 0);
+  if (config.notify) direct(client, "MSG", ["Сервер", config.notify]);
   console.log(`${admin ? "Админ." : "Пользователь"} авторизован: ${who}`);
 }
 incomingHandlers.push({
@@ -311,6 +312,10 @@ incomingHandlers.push({
     if (message.length < 2) return;
     if (!message[1]) return;
     let who = message[1].slice(0, 50);
+    if (who === "Сервер" || who === "Сервер") {
+      direct(client, "AUTH_FAIL", "Имя недоступно");
+      return;
+    }
     for (let cl of clients) {
       if (cl.who === who) {
         direct(client, "AUTH_FAIL", "Имя занято");
