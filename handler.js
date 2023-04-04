@@ -210,7 +210,7 @@ function onClose(client){
 
 function onMessage(client, raw){
   try {
-      if (flags.debug) console.log(`Получено (${client.who}:${client.admin}): ` + raw);
+      if (flags.debug) console.log(`Получено (${client.who}:${client.admin ? 1 : 0}): ` + raw);
       const message = JSON.parse(raw);
       let _done = false;
       incomingHandlers.forEach(handler => {
@@ -368,12 +368,12 @@ function enterRoom(client, rid, notify = undefined){
   direct(client, "MEMBERS", roomMembersNames(rid));
   client.rid = rid;
   rooms[rid].mems.add(client);
-  if (notify) {
-    direct(client, "MSG", ["Сервер", config.notify]);
-  }
   if (rid in historyPool){
     direct(client, "HISTORY", roomHistory(rid));
   }
+  // if (notify) {
+  //   direct(client, "MSG", ["Сервер", config.notify]);
+  // }
   roomBroadcast(rid, "NEW_MEM", client.who);
   roomBroadcast(rid, "ROOM_COUNT", rooms[rid].mems.size);
 }
@@ -424,5 +424,24 @@ incomingHandlers.push({
     if (!message[1]) return;
     
     totalBroadcast("NOTIFY", message[1]);
+  }
+});
+incomingHandlers.push({
+  mode: "MSG_SERVER",
+  func: function(client, message){
+    if (!client.admin) return;
+    if (!clients.has(client)) return;
+    if (!("rid" in client)) return;
+    if (message.length < 2) return;
+    if (message[1] === "") return;
+
+    message[1] = message[1].slice(0, 2000);
+    roomBroadcast(client.rid, "MSG", ["Сервер", message[1]]);
+  }
+});
+incomingHandlers.push({
+  mode: "RELOAD_CONFIG",
+  func: function(client, message){
+    if (!client.admin) return;
   }
 });
