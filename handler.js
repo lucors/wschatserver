@@ -7,22 +7,60 @@ let db;
 const clients = new Set();
 let incomingHandlers = []; //[{mode: string, func: function()},...]
 let flags = {
-  debug: config.debug
+  debug: config.debug,
+  prepareAdmins: false,
+  prepareRooms: false,
 }
 let unavailableNames = config.unavailableNames ?? [];
 let admins = {};
 let rooms = [];
+
+// 
 const historyPool = {
+  pool: {},
+  interval: undefined,
   prepare: function() {
     rooms.forEach((room, index) => {
       if (room.history) {
-        historyPool[index] = {
-          msg: [],
-          blur: []
-        };
+        historyPool.pool[index] = []
       }
     });
-    delete historyPool.prepare;
+  },
+  clear: function() {
+    clearInterval(historyPool.interval);
+    historyPool.pool = {};
+  },
+  push: function(rid, mode, data) {
+    if (!rooms[rid].history) return;
+    if (["MSG", "MSG_BLUR"].indexOf(mode) < 0) return;
+    historyPool.pool[rid].push([mode, data]);
+  },
+  get: function(rid) {
+    if (rid in historyPool.pool){
+      return historyPool.pool[rid];
+    }
+    return [];
+  },
+  slice: function(maxlen, interval) {
+    // if (!fs.existsSync("./history")) fs.mkdirSync("./history");
+    historyPool.interval = setInterval(() => {
+      try {
+        for (const rid of Object.keys(historyPool.pool)) {
+
+          if (historyPool.pool[rid].length > maxlen){
+            // const longhistory = JSON.stringify(historyPool[rid].slice(0, historyPool[rid].length-maxlen))+'\n';
+            // fs.appendFile(`./history/${rid}.txt`, longhistory, function(error){
+            //   if (error) console.error(`Ошибка записи истории. Комната ${rid}`);
+            // });
+            historyPool.pool[rid] = historyPool.pool[rid].slice(historyPool.pool[rid].length-maxlen);
+            console.log(`History pool (${rid}:msg) sliced`);
+          }
+        }
+      }
+      catch (error) {
+        console.error(error);
+      }
+    }, interval);
   }
 }
 
@@ -30,19 +68,22 @@ const historyPool = {
 //-----------------------------------------------------------------------------------
 // EXPORTS
 module.exports.prepare = function() {
-  // admins = config.admins;
-  // rooms = config.rooms;
+  flags.prepareAdmins = false;
+  flags.prepareRooms = false;
   db = mysql.createConnection(config.db);
   db.query(
     "SELECT * FROM admins",
     function(err, results) {
       if (err) {
         console.error(err);
+        flags.prepareAdmins = true;
         return;
       }
+      admins = {};
       results.forEach((admin) => {
         admins[admin["name"]] = Number(admin["passhash"]);
       });
+      flags.prepareAdmins = true;
     }
   );
   db.query(
@@ -50,8 +91,10 @@ module.exports.prepare = function() {
     function(err, results) {
       if (err) {
         console.error(err);
+        flags.prepareRooms = true;
         return;
       }
+      rooms = [];
       results.forEach((room) => {
         rooms.push({
           title: room["title"],
@@ -61,7 +104,8 @@ module.exports.prepare = function() {
       });
       historyPool.prepare();
       //Старт цикла среза истории
-      historySlice(config.historySlice.count, config.historySlice.time);
+      historyPool.slice(config.historySlice.count, config.historySlice.time);
+      flags.prepareRooms = true;
     }
   );
   db.end();
@@ -77,25 +121,7 @@ module.exports.onConnect = function(client) {
 
 //-----------------------------------------------------------------------------------
 // COMMON UTILS
-function historySlice(maxlen, interval) {
-  // if (!fs.existsSync("./history")) fs.mkdirSync("./history");
-  setInterval(() => {
-    for (const rid of Object.keys(historyPool)) {
-      if (historyPool[rid].msg.length > maxlen){
-        // const longhistory = JSON.stringify(historyPool[rid].slice(0, historyPool[rid].length-maxlen))+'\n';
-        // fs.appendFile(`./history/${rid}.txt`, longhistory, function(error){
-        //   if (error) console.error(`Ошибка записи истории. Комната ${rid}`);
-        // });
-        historyPool[rid].msg = historyPool[rid].msg.slice(historyPool[rid].msg.length-maxlen);
-        console.log(`History pool (${rid}:msg) sliced`);
-      }
-      if (historyPool[rid].blur.length > maxlen){
-        historyPool[rid].blur = historyPool[rid].blur.slice(historyPool[rid].blur.length-maxlen);
-        console.log(`History pool (${rid}:blur) sliced`);
-      }
-    }
-  }, interval);
-}
+
 
 // ROOMS UTILS
 function checkRid(rid) {
@@ -130,21 +156,10 @@ function roomsData() {
 }
 function roomBroadcast(rid, mode, data) {
   if (!checkRid(rid)) return;
-  if (mode === "MSG" && rooms[rid].history) {
-    historyPool[rid].msg.push(data);
-  }
-  else if (mode === "MSG_BLUR" && rooms[rid].history) {
-    historyPool[rid].blur.push(data);
-  }
+  historyPool.push(rid, mode, data);
   for (let member of rooms[rid].mems) {
     direct(member, mode, data);
   }
-}
-function roomHistory(rid) {
-  if (rid in historyPool){
-    return historyPool[rid];
-  }
-  return [];
 }
 
 // USERS UTILS
@@ -211,6 +226,10 @@ function onClose(client){
 function onMessage(client, raw){
   try {
       if (flags.debug) console.log(`Получено (${client.who}:${client.admin ? 1 : 0}): ` + raw);
+      if (!flags.prepareRooms || !flags.prepareAdmins) {
+        if (flags.debug) console.log("Настройка не завершена.");
+        return;
+      }
       const message = JSON.parse(raw);
       let _done = false;
       incomingHandlers.forEach(handler => {
@@ -368,8 +387,8 @@ function enterRoom(client, rid, notify = undefined){
   direct(client, "MEMBERS", roomMembersNames(rid));
   client.rid = rid;
   rooms[rid].mems.add(client);
-  if (rid in historyPool){
-    direct(client, "HISTORY", roomHistory(rid));
+  if (rid in historyPool.pool){
+    direct(client, "HISTORY", historyPool.get(rid));
   }
   // if (notify) {
   //   direct(client, "MSG", ["Сервер", config.notify]);
@@ -443,5 +462,7 @@ incomingHandlers.push({
   mode: "RELOAD_CONFIG",
   func: function(client, message){
     if (!client.admin) return;
+    module.exports.prepare();
+    direct(client, "RELOAD_CONFIG_DONE");
   }
 });
