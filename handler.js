@@ -208,18 +208,21 @@ function adminBroadcast(mode, data) {
 
 //-----------------------------------------------------------------------------------
 // WSS HANDLERS
-function onClose(client){
+function onClose(client, kick=false){
   let who = "Null";
   clients.forEach((cl) => {
     if (cl === client) {
       leaveRoom(cl);
       clients.delete(cl);
       who = cl.who;
+      delete client.rid;
+      delete client.who;
+      delete client.admin;
       return;
     }
   });
   adminBroadcast("DEL_CLI", who);
-  console.log(`Пользователь отключился: ${who}`);
+  console.log(`Пользователь ${kick ? "кикнут" : "отключился"}: ${who}`);
   totalBroadcast("COUNT", clients.size);
 }
 
@@ -231,12 +234,10 @@ function onMessage(client, raw){
         return;
       }
       const message = JSON.parse(raw);
-      let _done = false;
-      incomingHandlers.forEach(handler => {
+      const _done = incomingHandlers.some(handler => {
           if (handler.mode == message[0]) {
               handler.func(client, message);
-              _done = true;
-              return;
+              return true;
           }
       });
       if (!_done) {
@@ -254,59 +255,6 @@ incomingHandlers.push({
   mode: "PING",
   func: function(client, message){
     direct(client, "PING", Date.now());
-  }
-});
-
-incomingHandlers.push({
-  mode: "MSG",
-  func: function(client, message){
-    if (!clients.has(client)) return;
-    if (!("who" in client)) return;
-    if (!("rid" in client)) return;
-    if (message.length < 2) return;
-    if (message[1] === "") return;
-
-    message[1] = message[1].slice(0, 2000);
-    roomBroadcast(client.rid, "MSG", [client.who, message[1]]);
-  }
-});
-
-incomingHandlers.push({
-  mode: "MSG_BLUR",
-  func: function(client, message){
-    if (!clients.has(client)) return;
-    if (!("who" in client)) return;
-    if (!("rid" in client)) return;
-    if (message.length < 2) return;
-    if (message[1] === "") return;
-
-    message[1] = message[1].slice(0, 2000);
-    roomBroadcast(client.rid, "MSG_BLUR", [client.who, message[1]]);
-  }
-});
-
-incomingHandlers.push({
-  mode: "MSG_DIRECT",
-  func: function(client, message){
-    if (!clients.has(client)) return;
-    if (!("who" in client)) return;
-    if (!("rid" in client)) return;
-    if (message.length < 2) return;
-    if (message[1].length < 2) return;
-    if (!message[1][0] || !message[1][1]) return;
-
-    if (message[1][0] === client.who) {
-      direct(client, "ERROR", "Отправка самому себе недоступна");
-      return;
-    }
-    const whom = roomMemberByWho(client.rid, message[1][0]);
-    if (!whom) {
-      direct(client, "ERROR", "Пользователь не найден");
-      return;
-    }
-    message[1][1] = message[1][1].slice(0, 2000);
-    direct(client, "MSG_DIRECT", [client.who, whom.who, message[1][1]]);
-    direct(whom, "MSG_DIRECT", [client.who, whom.who, message[1][1]]);
   }
 });
 
@@ -416,6 +364,59 @@ incomingHandlers.push({
   }
 });
 
+incomingHandlers.push({
+  mode: "MSG",
+  func: function(client, message){
+    if (!clients.has(client)) return;
+    if (!("who" in client)) return;
+    if (!("rid" in client)) return;
+    if (message.length < 2) return;
+    if (message[1] === "") return;
+
+    message[1] = message[1].slice(0, 2000);
+    roomBroadcast(client.rid, "MSG", [client.who, message[1]]);
+  }
+});
+
+incomingHandlers.push({
+  mode: "MSG_BLUR",
+  func: function(client, message){
+    if (!clients.has(client)) return;
+    if (!("who" in client)) return;
+    if (!("rid" in client)) return;
+    if (message.length < 2) return;
+    if (message[1] === "") return;
+
+    message[1] = message[1].slice(0, 2000);
+    roomBroadcast(client.rid, "MSG_BLUR", [client.who, message[1]]);
+  }
+});
+
+incomingHandlers.push({
+  mode: "MSG_DIRECT",
+  func: function(client, message){
+    if (!clients.has(client)) return;
+    if (!("who" in client)) return;
+    if (!("rid" in client)) return;
+    if (message.length < 2) return;
+    if (message[1].length < 2) return;
+    if (!message[1][0] || !message[1][1]) return;
+
+    if (message[1][0] === client.who) {
+      direct(client, "ERROR", "Отправка самому себе недоступна");
+      return;
+    }
+    const whom = roomMemberByWho(client.rid, message[1][0]);
+    if (!whom) {
+      direct(client, "ERROR", "Пользователь не найден");
+      return;
+    }
+    message[1][1] = message[1][1].slice(0, 2000);
+    direct(client, "MSG_DIRECT", [client.who, whom.who, message[1][1]]);
+    direct(whom, "MSG_DIRECT", [client.who, whom.who, message[1][1]]);
+  }
+});
+
 //-----------------------------------------------------------------------------------
 // ADMINS WSS HANDLERS
 incomingHandlers.push({
@@ -464,5 +465,30 @@ incomingHandlers.push({
     if (!client.admin) return;
     module.exports.prepare();
     direct(client, "RELOAD_CONFIG_DONE");
+  }
+});
+incomingHandlers.push({
+  mode: "KICK",
+  func: function(client, message){
+    if (!client.admin) return;
+
+    if (message[1] === client.who) {
+      direct(client, "ERROR", "Себя исключить нельзя");
+      return;
+    }
+    const whom = clientByWho(message[1]);
+    if (!whom) {
+      direct(client, "ERROR", "Пользователь не найден");
+      return;
+    }
+    if (whom.admin) {
+      direct(client, "ERROR", "Админа исключить нельзя");
+      return;
+    }
+    roomBroadcast(whom.rid, "KICK", whom.who);
+    if (client.rid !== whom.rid) {
+      direct(client, "KICK", whom.who);
+    }
+    onClose(whom, true);
   }
 });
