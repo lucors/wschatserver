@@ -12,6 +12,6 @@ config.historySlice = {
     time: 1800*1000,
 };
 config.unavailableNames = ["сервер", "server"];
-config.notify = `Всем привет!`;
+config.notify = `Добро пожаловать в<br><strong>WebSocket Chat!</strong>`;
 
 module.exports = config;
